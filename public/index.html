@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Smart Campus - Student Safety</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 60px; background: #f4f6f8; }
+        .sos-btn {
+          background-color: #e63946;
+          color: white;
+          font-size: 28px;
+          font-weight: bold;
+          width: 180px;
+          height: 180px;
+          border-radius: 50%;
+          border: 6px solid #b71c1c;
+          cursor: pointer;
+          box-shadow: 0 8px 15px rgba(0,0,0,0.3);
+        }
+        #status { margin-top: 25px; font-weight: bold; font-size: 18px; }
+    </style>
+</head>
+<body>
+<h2>Campus Safety SOS Portal</h2>
+<p>Emergency me button dabayein:</p>
+<button class="sos-btn" onclick="sendSOS()">SOS</button>
+<p id="status"></p>
+
+<script>
+    function sendSOS() {
+      const statusText = document.getElementById('status');
+      statusText.innerText = "Location detect ho rahi hai...";
+
+      if (!navigator.geolocation) {
+        statusText.innerText = "Geolocation support nahi karta.";
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(async (position) => {
+        const payload = {
+          studentId: "STU-1024",
+          studentName: "Rahul Sharma",
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          timestamp: new Date().toLocaleString()
+        };
+
+        try {
+          const response = await fetch('http://localhost:5000/api/sos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const data = await response.json();
+          statusText.style.color = "green";
+          statusText.innerText = "Alert successfully bheja gaya!";
+        } catch (err) {
+          statusText.style.color = "red";
+          statusText.innerText = "Server connect nahi ho paya!";
+        }
+      }, () => {
+        statusText.innerText = "Location permission allow kijiye.";
+      });
+    }
+</script>
+</body>
+</html>

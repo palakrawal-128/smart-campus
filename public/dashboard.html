@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Campus Security Live Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 30px; background-color: #f8f9fa; }
+        h2 { color: #b71c1c; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #343a40; color: white; }
+        tr:nth-child(even) { background-color: #ffebee; }
+        .btn-map { background: #007bff; color: white; padding: 6px 12px; text-decoration: none; border-radius: 4px; font-weight: bold; }
+        .badge { background: red; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+    </style>
+</head>
+<body>
+
+<h2>🚨 Campus Security - Real-time SOS Alerts</h2>
+<p>Har 3 second me auto-refresh ho raha hai...</p>
+
+<table>
+    <thead>
+    <tr>
+        <th>ID</th>
+        <th>Student Name</th>
+        <th>Student ID</th>
+        <th>Time</th>
+        <th>Status</th>
+        <th>Live Location</th>
+    </tr>
+    </thead>
+    <tbody id="alerts-body">
+    <!-- Data yahan auto load hoga -->
+    </tbody>
+</table>
+
+<script>
+    async function fetchAlerts() {
+      try {
+        const res = await fetch('http://localhost:5000/api/alerts');
+        const data = await res.json();
+        const tbody = document.getElementById('alerts-body');
+        tbody.innerHTML = '';
+
+        if(data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No active emergencies right now.</td></tr>';
+          return;
+        }
+
+        data.forEach(item => {
+          const mapUrl = `https://www.google.com/maps?q=${item.location.latitude},${item.location.longitude}`;
+          const row = `
+            <tr>
+              <td>#${item.id}</td>
+              <td><b>${item.studentName}</b></td>
+              <td>${item.studentId}</td>
+              <td>${item.time}</td>
+              <td><span class="badge">${item.status}</span></td>
+              <td><a class="btn-map" href="${mapUrl}" target="_blank">View on Google Maps</a></td>
+            </tr>
+          `;
+          tbody.innerHTML += row;
+        });
+      } catch (e) {
+        console.error("Error fetching alerts", e);
+      }
+    }
+
+    // Har 3 second me update karega
+    setInterval(fetchAlerts, 3000);
+    fetchAlerts();
+</script>
+</body>
+</html>
