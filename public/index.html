@@ -2,65 +2,213 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Smart Campus - Student Safety</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Campus - Student Safety Portal</title>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; margin-top: 60px; background: #f4f6f8; }
-        .sos-btn {
-          background-color: #e63946;
-          color: white;
-          font-size: 28px;
-          font-weight: bold;
-          width: 180px;
-          height: 180px;
-          border-radius: 50%;
-          border: 6px solid #b71c1c;
-          cursor: pointer;
-          box-shadow: 0 8px 15px rgba(0,0,0,0.3);
-        }
-        #status { margin-top: 25px; font-weight: bold; font-size: 18px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 16px; box-sizing: border-box; }
+        .card { background: #1e293b; padding: 25px; border-radius: 18px; width: 100%; max-width: 400px; box-shadow: 0 12px 30px rgba(0,0,0,0.5); text-align: center; }
+        input, select { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; font-size: 14px; box-sizing: border-box; }
+        .btn-primary { width: 100%; padding: 12px; background: #2563eb; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 15px; cursor: pointer; margin-top: 10px; }
+        .sos-btn { margin: 20px auto; width: 155px; height: 155px; border-radius: 50%; background: radial-gradient(circle, #ef4444 0%, #b91c1c 100%); border: 6px solid #f87171; color: white; font-size: 32px; font-weight: 800; cursor: pointer; box-shadow: 0 0 30px rgba(239, 68, 68, 0.6); display: flex; align-items: center; justify-content: center; }
+        .sos-btn:active { transform: scale(0.93); }
+        .walk-box { background: #0f172a; padding: 12px; border-radius: 10px; margin-top: 18px; border: 1px solid #334155; }
+        .btn-walk { background: #059669; color: white; border: none; padding: 8px 14px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 13px; }
+        .outside-alert { background: #7f1d1d; padding: 12px; border-radius: 8px; margin-top: 12px; font-size: 13px; }
+        .call-112 { display: inline-block; margin-top: 8px; background: #fbbf24; color: #000; padding: 8px 14px; border-radius: 6px; text-decoration: none; font-weight: bold; }
+        .hidden { display: none; }
     </style>
 </head>
 <body>
-<h2>Campus Safety SOS Portal</h2>
-<p>Emergency me button dabayein:</p>
-<button class="sos-btn" onclick="sendSOS()">SOS</button>
-<p id="status"></p>
+
+<!-- SCREEN 1: ONE-TIME PROFILE SETUP -->
+<div class="card" id="setup-screen">
+    <h2 style="color: #38bdf8; margin-top: 0;">Student Verification</h2>
+    <p style="color: #94a3b8; font-size: 13px;">Sirf ek baar apni college details save karein.</p>
+    <input type="text" id="in-name" placeholder="Full Name (e.g., Palak Rawal)">
+    <input type="text" id="in-roll" placeholder="College Roll No (e.g., 0201CS221045)">
+    <input type="tel" id="in-contact" placeholder="Mobile Number (+91...)">
+    <button class="btn-primary" onclick="saveProfile()">Save & Continue</button>
+</div>
+
+<!-- SCREEN 2: MAIN SOS & SAFE WALK PORTAL -->
+<div class="card hidden" id="sos-screen">
+    <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#94a3b8;">
+        <span id="user-badge"></span>
+        <span style="text-decoration:underline; cursor:pointer;" onclick="resetProfile()">Edit ID</span>
+    </div>
+
+    <h2 style="color: #f87171; margin: 10px 0 4px;">Campus Safety SOS</h2>
+    <p style="color: #94a3b8; font-size: 12px; margin-top: 0;">Emergency type chunein aur button dabayein</p>
+
+    <select id="category">
+        <option value="SECURITY / RAGGING">🚨 Security / Harassment / Ragging</option>
+        <option value="MEDICAL EMERGENCY">🏥 Medical Emergency / Injury</option>
+        <option value="FIRE / HAZARD">🔥 Fire / Electrical Hazard</option>
+        <option value="GENERAL SOS">⚠️ General Emergency</option>
+    </select>
+
+    <button class="sos-btn" onclick="triggerSOS()">SOS</button>
+
+    <div id="status-box" style="font-size: 14px; font-weight: 600; min-height: 22px;"></div>
+    <div id="outside-box" class="outside-alert hidden"></div>
+
+    <!-- SAFE WALK TIMER -->
+    <div class="walk-box">
+        <div style="font-size: 13px; font-weight: bold; color: #34d399;">🚶 Safe Walk Mode (Night Escort)</div>
+        <p style="font-size: 11px; color: #94a3b8; margin: 4px 0 8px;">10 min me "I Reached" nahi dabaya toh auto-SOS jayega.</p>
+        <button class="btn-walk" id="walk-btn" onclick="toggleSafeWalk()">Start 10-Min Safe Walk</button>
+        <div id="walk-timer" style="font-size: 16px; font-weight: bold; color: #fbbf24; margin-top: 6px;"></div>
+    </div>
+</div>
 
 <script>
-    function sendSOS() {
-      const statusText = document.getElementById('status');
-      statusText.innerText = "Location detect ho rahi hai...";
+    let activeAlertId = null;
+    let statusPoller = null;
+    let walkInterval = null;
+    let walkSeconds = 600; // 10 minutes
 
-      if (!navigator.geolocation) {
-        statusText.innerText = "Geolocation support nahi karta.";
+    // Page load par check karein ki profile pehle se saved hai ya nahi
+    window.onload = () => {
+      const saved = localStorage.getItem('campus_student');
+      if (saved) {
+        const user = JSON.parse(saved);
+        document.getElementById('user-badge').innerText = `${user.name} (${user.roll})`;
+        document.getElementById('setup-screen').classList.add('hidden');
+        document.getElementById('sos-screen').classList.remove('hidden');
+      }
+    };
+
+    function saveProfile() {
+      const name = document.getElementById('in-name').value.trim();
+      const roll = document.getElementById('in-roll').value.trim();
+      const contact = document.getElementById('in-contact').value.trim();
+
+      if (!name || roll.length < 4 || contact.length < 10) {
+        alert("Kripya sahi Naam, Roll Number aur Mobile Number bharein.");
         return;
       }
 
-      navigator.geolocation.getCurrentPosition(async (position) => {
-        const payload = {
-          studentId: "STU-1024",
-          studentName: "Rahul Sharma",
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          timestamp: new Date().toLocaleString()
-        };
+      localStorage.setItem('campus_student', JSON.stringify({ name, roll, contact }));
+      location.reload();
+    }
 
+    function resetProfile() {
+      localStorage.removeItem('campus_student');
+      location.reload();
+    }
+
+    function triggerSOS() {
+      const statusBox = document.getElementById('status-box');
+      const outsideBox = document.getElementById('outside-box');
+      outsideBox.classList.add('hidden');
+
+      statusBox.style.color = '#38bdf8';
+      statusBox.innerText = 'Fetching GPS location...';
+
+      if (!navigator.geolocation) {
+        statusBox.style.color = '#f87171';
+        statusBox.innerText = 'GPS not supported in browser.';
+        return;
+      }
+
+      const user = JSON.parse(localStorage.getItem('campus_student'));
+      const category = document.getElementById('category').value;
+
+      navigator.geolocation.getCurrentPosition(async (pos) => {
         try {
-          const response = await fetch('http://localhost:5000/api/sos', {
+          const res = await fetch('/api/sos', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify({
+              studentName: user.name,
+              rollNo: user.roll,
+              contact: user.contact,
+              category: category,
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude
+            })
           });
-          const data = await response.json();
-          statusText.style.color = "green";
-          statusText.innerText = "Alert successfully bheja gaya!";
+
+          const data = await res.json();
+          if (!data.success) {
+            statusBox.style.color = '#f87171';
+            statusBox.innerText = data.message;
+            return;
+          }
+
+          activeAlertId = data.alertId;
+          statusBox.style.color = '#4ade80';
+          statusBox.innerText = '✅ SOS Sent! Waiting for security response...';
+
+          // Agar student campus ke bahar hai toh Police 112 option dikhayein
+          if (!data.isInsideCampus) {
+            outsideBox.classList.remove('hidden');
+            outsideBox.innerHTML = `
+              ⚠️ Aap campus se <b>${data.distance} km bahar</b> hain. College guard wahan nahi aa sakte.<br>
+              <a class="call-112" href="tel:112">📞 Call Police Emergency (112)</a>
+            `;
+          }
+
+          // Live response check karna shuru karein
+          if (statusPoller) clearInterval(statusPoller);
+          statusPoller = setInterval(checkGuardResponse, 3000);
+
         } catch (err) {
-          statusText.style.color = "red";
-          statusText.innerText = "Server connect nahi ho paya!";
+          statusBox.style.color = '#f87171';
+          statusBox.innerText = 'Network error! Try again.';
         }
       }, () => {
-        statusText.innerText = "Location permission allow kijiye.";
-      });
+        statusBox.style.color = '#f87171';
+        statusBox.innerText = 'Please allow GPS Location permission!';
+      }, { enableHighAccuracy: true });
+    }
+
+    async function checkGuardResponse() {
+      if (!activeAlertId) return;
+      const res = await fetch(`/api/status/${activeAlertId}`);
+      const data = await res.json();
+      const statusBox = document.getElementById('status-box');
+
+      if (data.status === 'DISPATCHED') {
+        statusBox.style.color = '#fbbf24';
+        statusBox.innerText = '🚓 Security Team Dispatched! Help is on the way!';
+      } else if (data.status === 'RESOLVED') {
+        statusBox.style.color = '#4ade80';
+        statusBox.innerText = '✔️ Incident marked Resolved by Security.';
+        clearInterval(statusPoller);
+      }
+    }
+
+    function toggleSafeWalk() {
+      const btn = document.getElementById('walk-btn');
+      const timerDiv = document.getElementById('walk-timer');
+
+      if (walkInterval) {
+        clearInterval(walkInterval);
+        walkInterval = null;
+        walkSeconds = 600;
+        btn.innerText = 'Start 10-Min Safe Walk';
+        btn.style.background = '#059669';
+        timerDiv.innerText = 'Safe arrival confirmed!';
+        return;
+      }
+
+      btn.innerText = 'I Reached Safely (Stop Timer)';
+      btn.style.background = '#dc2626';
+
+      walkInterval = setInterval(() => {
+        walkSeconds--;
+        const mins = Math.floor(walkSeconds / 60);
+        const secs = walkSeconds % 60;
+        timerDiv.innerText = `Time left: ${mins}:${secs < 10 ? '0' : ''}${secs}`;
+
+        if (walkSeconds <= 0) {
+          clearInterval(walkInterval);
+          walkInterval = null;
+          timerDiv.innerText = 'Time expired! Triggering Auto-SOS...';
+          triggerSOS();
+        }
+      }, 1000);
     }
 </script>
 </body>

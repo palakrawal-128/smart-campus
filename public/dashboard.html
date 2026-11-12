@@ -2,74 +2,137 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Campus Security Live Dashboard</title>
+    <title>Campus Security Control Room</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 30px; background-color: #f8f9fa; }
-        h2 { color: #b71c1c; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
-        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-        th { background-color: #343a40; color: white; }
-        tr:nth-child(even) { background-color: #ffebee; }
-        .btn-map { background: #007bff; color: white; padding: 6px 12px; text-decoration: none; border-radius: 4px; font-weight: bold; }
-        .badge { background: red; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 24px; background: #f1f5f9; }
+        .header { display: flex; justify-content: space-between; align-items: center; background: #1e293b; color: white; padding: 18px 24px; border-radius: 12px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        th, td { padding: 14px; text-align: left; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
+        th { background: #0f172a; color: white; }
+        .badge-inside { background: #dcfce7; color: #166534; padding: 3px 8px; border-radius: 6px; font-weight: bold; font-size: 11px; }
+        .badge-outside { background: #fef3c7; color: #92400e; padding: 3px 8px; border-radius: 6px; font-weight: bold; font-size: 11px; }
+        .status-active { background: #fee2e2; color: #b91c1c; padding: 4px 10px; border-radius: 20px; font-weight: bold; }
+        .status-dispatched { background: #fef08a; color: #854d0e; padding: 4px 10px; border-radius: 20px; font-weight: bold; }
+        .status-resolved { background: #e2e8f0; color: #475569; padding: 4px 10px; border-radius: 20px; font-weight: bold; }
+        .btn { padding: 6px 10px; border: none; border-radius: 6px; color: white; font-weight: 600; cursor: pointer; font-size: 12px; text-decoration: none; display: inline-block; margin-right: 4px; }
+        .btn-map { background: #2563eb; }
+        .btn-dispatch { background: #d97706; }
+        .btn-resolve { background: #059669; }
     </style>
 </head>
 <body>
 
-<h2>🚨 Campus Security - Real-time SOS Alerts</h2>
-<p>Har 3 second me auto-refresh ho raha hai...</p>
+<div class="header">
+    <div>
+        <h2 style="margin:0;">🛡️ Campus Security Command Center</h2>
+        <small style="color:#94a3b8;">Live Geofenced Incident Monitoring & Siren Alert</small>
+    </div>
+    <button onclick="enableAudio()" id="sound-btn" style="background:#ef4444; color:white; border:none; padding:10px 16px; border-radius:8px; font-weight:bold; cursor:pointer;">
+        🔇 Click to Enable Siren Sound
+    </button>
+</div>
 
 <table>
     <thead>
     <tr>
-        <th>ID</th>
-        <th>Student Name</th>
-        <th>Student ID</th>
+        <th>ID & Category</th>
+        <th>Student Details</th>
+        <th>Campus Zone</th>
         <th>Time</th>
         <th>Status</th>
-        <th>Live Location</th>
+        <th>Actions</th>
     </tr>
     </thead>
-    <tbody id="alerts-body">
-    <!-- Data yahan auto load hoga -->
-    </tbody>
+    <tbody id="alerts-table"></tbody>
 </table>
 
 <script>
-    async function fetchAlerts() {
+    let audioEnabled = false;
+    let audioCtx = null;
+
+    function enableAudio() {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      audioEnabled = true;
+      const btn = document.getElementById('sound-btn');
+      btn.innerText = '🔊 Siren Sound Active';
+      btn.style.background = '#10b981';
+    }
+
+    // Browser built-in beep siren (kisi external mp3 file ki zaroorat nahi)
+    function playSirenBeep() {
+      if (!audioEnabled || !audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.4);
+      gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.4);
+    }
+
+    async function loadAlerts() {
       try {
-        const res = await fetch('http://localhost:5000/api/alerts');
-        const data = await res.json();
-        const tbody = document.getElementById('alerts-body');
+        const res = await fetch('/api/alerts');
+        const list = await res.json();
+        const tbody = document.getElementById('alerts-table');
         tbody.innerHTML = '';
 
-        if(data.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No active emergencies right now.</td></tr>';
+        if (list.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:30px; color:#64748b;">No incidents reported.</td></tr>';
           return;
         }
 
-        data.forEach(item => {
+        let hasActiveEmergency = false;
+
+        list.forEach(item => {
+          if (item.status === 'ACTIVE') hasActiveEmergency = true;
           const mapUrl = `https://www.google.com/maps?q=${item.location.latitude},${item.location.longitude}`;
-          const row = `
-            <tr>
-              <td>#${item.id}</td>
-              <td><b>${item.studentName}</b></td>
-              <td>${item.studentId}</td>
+          const isInside = item.zone === 'INSIDE CAMPUS';
+
+          let statusClass = 'status-active';
+          if (item.status === 'DISPATCHED') statusClass = 'status-dispatched';
+          if (item.status === 'RESOLVED') statusClass = 'status-resolved';
+
+          tbody.innerHTML += `
+            <tr style="${item.status === 'ACTIVE' ? 'background:#fff1f2;' : ''}">
+              <td><b>#INC-${item.id}</b><br><span style="color:#b91c1c; font-weight:bold;">${item.category}</span></td>
+              <td><b>${item.studentName}</b><br>${item.rollNo} | ${item.contact}</td>
+              <td>
+                <span class="${isInside ? 'badge-inside' : 'badge-outside'}">${item.zone}</span><br>
+                <small style="color:#64748b;">${item.distanceFromCampus} km from center</small>
+              </td>
               <td>${item.time}</td>
-              <td><span class="badge">${item.status}</span></td>
-              <td><a class="btn-map" href="${mapUrl}" target="_blank">View on Google Maps</a></td>
+              <td><span class="${statusClass}">${item.status}</span></td>
+              <td>
+                <a class="btn btn-map" href="${mapUrl}" target="_blank">📍 Map</a>
+                ${item.status === 'ACTIVE' ? `<button class="btn btn-dispatch" onclick="updateAction(${item.id}, 'DISPATCHED')">🚓 Dispatch</button>` : ''}
+                ${item.status !== 'RESOLVED' ? `<button class="btn btn-resolve" onclick="updateAction(${item.id}, 'RESOLVED')">✔️ Resolve</button>` : ''}
+              </td>
             </tr>
           `;
-          tbody.innerHTML += row;
         });
-      } catch (e) {
-        console.error("Error fetching alerts", e);
+
+        if (hasActiveEmergency) playSirenBeep();
+
+      } catch (err) {
+        console.error(err);
       }
     }
 
-    // Har 3 second me update karega
-    setInterval(fetchAlerts, 3000);
-    fetchAlerts();
+    async function updateAction(id, action) {
+      await fetch('/api/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action })
+      });
+      loadAlerts();
+    }
+
+    setInterval(loadAlerts, 3000);
+    loadAlerts();
 </script>
 </body>
 </html>
